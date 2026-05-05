@@ -7,15 +7,50 @@ It supports export-based input modes only:
 - Local Instagram data export JSON files (`media.json`)
 - **Browser web app** (`webapp/`) for visitors: ZIP-only, runs entirely in the tab (no upload to your server)
 
+## Contributor Quick Start
+
+```bash
+python -m pip install --upgrade pip
+pip install -e .
+pip install playwright
+python -m playwright install --with-deps chromium
+python -m unittest discover -s tests -v
+```
+
+Notes:
+
+- Use Python 3.12+ to match CI.
+- `pip install -e .` installs the local package in editable mode.
+- Playwright + Chromium are required for `tests/test_webapp_smoke.py`.
+
 ## Usage
 
 ### 1) Convert local Instagram export (legacy mode)
 
 ```bash
 python -m instagramdumpconverter -i <inputdir>
+# after `pip install -e .`, you can also run:
+instagramdumpconverter -i <inputdir>
 ```
 
 `<inputdir>` should contain one or more extracted Instagram export folders where each folder includes a `media.json`.
+
+Optional CLI flags:
+
+```bash
+python -m instagramdumpconverter -i <inputdir> --theme memory-book --layout grid
+python -m instagramdumpconverter -i <inputdir> --doctor
+python -m instagramdumpconverter -i <inputdir> --doctor-json
+python -m instagramdumpconverter -i <inputdir> --doctor-json-format pretty
+python -m instagramdumpconverter -i <inputdir> --doctor-json-pretty
+python -m instagramdumpconverter -i <inputdir> --strict --strict-max-missing-media 0
+```
+
+- `--doctor` runs input validation + diagnostics only and skips HTML generation.
+- `--doctor-json` emits diagnostics as JSON (machine-readable, implies `--doctor`).
+- `--doctor-json-format` controls JSON style (`compact` default for CI logs, `pretty` for humans).
+- `--doctor-json-pretty` is a shortcut for `--doctor-json-format pretty`.
+- `--strict` fails when missing media exceeds threshold.
 
 ### 2) Browser web app (random visitors, export-only)
 
@@ -69,4 +104,7 @@ Output is written into the input directory.
 ## Notes
 
 - Local-export mode still reads local files from extracted dumps.
+- Shared parser contract lives in `shared/post_contract.json` (mirrored to `webapp/assets/post_contract.json` for browser validation).
+- HTML render snapshot checks live in `tests/test_render_snapshots.py`.
 - Web parser/render smoke tests live in `tests/test_webapp_smoke.py` (requires Playwright in the local environment).
+- CI runs via `.github/workflows/ci.yml` (syntax check + full unittest suite + Playwright smoke tests).

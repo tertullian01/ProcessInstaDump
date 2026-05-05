@@ -128,3 +128,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 /.idea/
+
+# Project-local editor/runtime artifacts
+.cursor/
+**/__pycache__/
+*.pyo
+*.pyd

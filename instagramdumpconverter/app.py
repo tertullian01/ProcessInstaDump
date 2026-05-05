@@ -8,10 +8,10 @@ import shutil
 from datetime import datetime
 from html import escape as html_escape
 
-
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "webtemplate"))
-POST_SCHEMA_KEYS = ("caption", "date_label", "timestamp_raw", "items")
+POST_CONTRACT_FILE = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "shared", "post_contract.json"))
+STRICT_DEFAULT_MAX_MISSING_MEDIA = 0
 
 
 class ConverterError(RuntimeError):
@@ -25,13 +25,35 @@ def fail(code, message, hint=""):
     raise ConverterError(code, message, hint)
 
 
+def load_post_contract():
+    with open(POST_CONTRACT_FILE, encoding="utf-8") as file:
+        contract = json.load(file)
+    required_post_keys = tuple(contract.get("required_post_keys") or [])
+    required_item_keys = tuple(contract.get("required_item_keys") or [])
+    if not required_post_keys:
+        fail("E_SCHEMA_CONTRACT", "Post contract has no required_post_keys.", "Fix shared/post_contract.json.")
+    return required_post_keys, required_item_keys
+
+
+POST_SCHEMA_KEYS, POST_ITEM_KEYS = load_post_contract()
+
+
 def usage():
     print("Usage:")
-    print("  python -m instagramdumpconverter -i <inputdir> [--theme <name>] [--layout stacked|grid]")
+    print("  python -m instagramdumpconverter -i <inputdir> [--theme <name>] [--layout stacked|grid] [--strict]")
+    print("  python -m instagramdumpconverter -i <inputdir> --doctor")
     print("")
     print("Output options:")
     print("  --theme classic|minimal|memory-book   visual theme; memory-book is print/PDF friendly (default: classic)")
-    print("  --layout stacked|grid                 multi-column grid on screen; print uses one column (default: stacked)")
+    print(
+        "  --layout stacked|grid                 multi-column grid on screen; print uses one column (default: stacked)"
+    )
+    print("  --doctor                              validate export completeness and print diagnostics only")
+    print("  --doctor-json                         emit doctor diagnostics as JSON (implies --doctor)")
+    print("  --doctor-json-format pretty|compact   doctor JSON output style (default: compact)")
+    print("  --doctor-json-pretty                  shortcut for --doctor-json-format pretty")
+    print("  --strict                              fail when missing media files exceed threshold")
+    print("  --strict-max-missing-media <count>    strict threshold (default: %d)" % STRICT_DEFAULT_MAX_MISSING_MEDIA)
 
 
 def path_leaf(path):
@@ -88,9 +110,9 @@ OUTPUT_THEMES = {
             'family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">'
         ),
         "header": (
-            "<header class=\"memory-book-header text-center py-3 py-md-4 px-2\">"
-            "<h1 class=\"memory-book-title mb-2\">Memory book</h1>"
-            "<p class=\"memory-book-subtitle mb-0 text-muted\">"
+            '<header class="memory-book-header text-center py-3 py-md-4 px-2">'
+            '<h1 class="memory-book-title mb-2">Memory book</h1>'
+            '<p class="memory-book-subtitle mb-0 text-muted">'
             "A printable keepsake from your Instagram archive — use your browser’s Print dialog for PDF or paper."
             "</p></header>"
         ),
@@ -111,8 +133,9 @@ def build_post(post):
         if not media_url:
             continue
         if media_type == "VIDEO":
-            media_html = "<div class='embed-responsive embed-responsive-16by9'><video width='320' height='240' controls><source src='%s' type='video/mp4'></video></div>" % html_escape(
-                media_url
+            media_html = (
+                "<div class='embed-responsive embed-responsive-16by9'><video width='320' height='240' controls><source src='%s' type='video/mp4'></video></div>"
+                % html_escape(media_url)
             )
         else:
             media_html = "<img src='%s' class='img-fluid' alt='%s'>" % (html_escape(media_url), caption_e)
@@ -209,6 +232,25 @@ def print_diagnostics(diagnostics):
     )
 
 
+def print_diagnostics_json(diagnostics, json_format="compact"):
+    if json_format == "pretty":
+        print(json.dumps(diagnostics, ensure_ascii=False, indent=2, sort_keys=True))
+        return
+    print(json.dumps(diagnostics, ensure_ascii=False, separators=(",", ":")))
+
+
+def enforce_strict(diagnostics, strict_enabled=False, max_missing_media=STRICT_DEFAULT_MAX_MISSING_MEDIA):
+    if not strict_enabled:
+        return
+    missing = diagnostics.get("media_files_missing", 0)
+    if missing > max_missing_media:
+        fail(
+            "E_STRICT_MISSING_MEDIA",
+            "Strict mode failed: media_files_missing=%d exceeds %d." % (missing, max_missing_media),
+            "Rebuild the dump with all ZIP parts, or raise --strict-max-missing-media.",
+        )
+
+
 def validate_post_schema(post):
     if not isinstance(post, dict):
         fail("E_SCHEMA_POST", "Post adapter produced a non-object value.", "Check loader adapter output.")
@@ -218,8 +260,19 @@ def validate_post_schema(post):
     if not isinstance(post.get("items"), list):
         fail("E_SCHEMA_POST", "Post 'items' must be a list.", "Ensure media adapter maps each media to an item object.")
     for item in post["items"]:
-        if not isinstance(item, dict) or not item.get("media_url"):
-            fail("E_SCHEMA_POST", "Post contains invalid media item.", "Check media path resolution for this export format.")
+        if not isinstance(item, dict):
+            fail(
+                "E_SCHEMA_POST",
+                "Post contains invalid media item.",
+                "Check media path resolution for this export format.",
+            )
+        for item_key in POST_ITEM_KEYS:
+            if not item.get(item_key):
+                fail(
+                    "E_SCHEMA_POST",
+                    "Post item missing required key '%s'." % item_key,
+                    "Check media path resolution for this export format.",
+                )
 
 
 def resolve_posts_export_uri(json_file_path, uri):
@@ -372,6 +425,11 @@ def run(argv):
     verbose = False
     output_theme = "classic"
     output_layout = "stacked"
+    doctor_mode = False
+    doctor_json_mode = False
+    doctor_json_format = "compact"
+    strict_mode = False
+    strict_max_missing_media = STRICT_DEFAULT_MAX_MISSING_MEDIA
 
     try:
         opts, _args = getopt.getopt(
@@ -381,6 +439,12 @@ def run(argv):
                 "inputdir=",
                 "theme=",
                 "layout=",
+                "doctor",
+                "doctor-json",
+                "doctor-json-format=",
+                "doctor-json-pretty",
+                "strict",
+                "strict-max-missing-media=",
             ],
         )
     except getopt.GetoptError as err:
@@ -400,8 +464,7 @@ def run(argv):
             candidate = arg.strip().lower()
             if candidate not in OUTPUT_THEMES:
                 print(
-                    "Invalid --theme value '%s'. Expected one of: %s"
-                    % (arg, ", ".join(sorted(OUTPUT_THEMES.keys())))
+                    "Invalid --theme value '%s'. Expected one of: %s" % (arg, ", ".join(sorted(OUTPUT_THEMES.keys())))
                 )
                 sys.exit(2)
             output_theme = candidate
@@ -411,16 +474,60 @@ def run(argv):
                 print("Invalid --layout value '%s'. Expected stacked or grid" % arg)
                 sys.exit(2)
             output_layout = candidate
+        elif opt == "--doctor":
+            doctor_mode = True
+        elif opt == "--doctor-json":
+            doctor_json_mode = True
+            doctor_mode = True
+        elif opt == "--doctor-json-format":
+            candidate = arg.strip().lower()
+            if candidate not in ("pretty", "compact"):
+                print("Invalid --doctor-json-format value '%s'. Expected pretty or compact" % arg)
+                sys.exit(2)
+            doctor_json_format = candidate
+            doctor_json_mode = True
+            doctor_mode = True
+        elif opt == "--doctor-json-pretty":
+            doctor_json_format = "pretty"
+            doctor_json_mode = True
+            doctor_mode = True
+        elif opt == "--strict":
+            strict_mode = True
+        elif opt == "--strict-max-missing-media":
+            try:
+                strict_max_missing_media = int(arg)
+                if strict_max_missing_media < 0:
+                    raise ValueError()
+            except ValueError:
+                print("Invalid --strict-max-missing-media value '%s'. Expected non-negative integer" % arg)
+                sys.exit(2)
 
     try:
         if input_dir is None:
-            fail("E_ARGS_INPUT_DIR", "No input directory specified.", "Use -i <inputdir> with an extracted Instagram export.")
+            fail(
+                "E_ARGS_INPUT_DIR",
+                "No input directory specified.",
+                "Use -i <inputdir> with an extracted Instagram export.",
+            )
         if not os.path.isdir(input_dir):
-            fail("E_INPUT_DIR_MISSING", "Unable to find input_dir '%s'." % input_dir, "Check path spelling and unzip location.")
+            fail(
+                "E_INPUT_DIR_MISSING",
+                "Unable to find input_dir '%s'." % input_dir,
+                "Check path spelling and unzip location.",
+            )
 
-        print("Processing data in %s" % input_dir)
+        if not doctor_json_mode:
+            print("Processing data in %s" % input_dir)
         posts, diagnostics = load_posts_from_dump(input_dir, verbose=verbose)
-        print_diagnostics(diagnostics)
+        if doctor_json_mode:
+            print_diagnostics_json(diagnostics, json_format=doctor_json_format)
+        else:
+            print_diagnostics(diagnostics)
+        enforce_strict(diagnostics, strict_enabled=strict_mode, max_missing_media=strict_max_missing_media)
+        if doctor_mode:
+            if not doctor_json_mode:
+                print("Doctor mode complete. Skipped HTML generation.")
+            return
         write_output(
             input_dir,
             render_posts(

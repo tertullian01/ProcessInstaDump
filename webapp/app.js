@@ -10,14 +10,32 @@ const state = {
   files: [],
   lastZipBytes: null,
   lastPosts: null,
+  startedAtMs: 0,
 };
-const POST_SCHEMA_KEYS = ["caption", "date_label", "timestamp_raw", "items"];
+let POST_SCHEMA_KEYS = ["caption", "date_label", "timestamp_raw", "items"];
+let POST_ITEM_KEYS = ["media_url"];
+let postContractLoaded = false;
 
 function appError(code, message, hint = "") {
   const err = new Error(message);
   err.code = code;
   err.hint = hint;
   return err;
+}
+
+async function loadSharedPostContract() {
+  if (postContractLoaded) return;
+  try {
+    const contract = JSON.parse(strFromU8(await fetchBinaryAsset("assets/post_contract.json")));
+    const postKeys = Array.isArray(contract.required_post_keys) ? contract.required_post_keys : [];
+    const itemKeys = Array.isArray(contract.required_item_keys) ? contract.required_item_keys : [];
+    if (postKeys.length > 0) POST_SCHEMA_KEYS = postKeys;
+    if (itemKeys.length > 0) POST_ITEM_KEYS = itemKeys;
+    postContractLoaded = true;
+  } catch {
+    // Fallback to built-in defaults if contract cannot be loaded.
+    postContractLoaded = true;
+  }
 }
 
 /** @type {Record<string, { id: string, pageTitle: string, bodyClass: string, mainClass: string, topClass: string, themeCss: string, extraHead: string, buildHeader: () => string }>} */
@@ -193,8 +211,11 @@ function validatePostSchema(post) {
   }
   if (!Array.isArray(post.items)) throw appError("E_SCHEMA_POST", 'Post key "items" must be an array.');
   for (const item of post.items) {
-    if (!item || typeof item !== "object" || !item.media_url) {
+    if (!item || typeof item !== "object") {
       throw appError("E_SCHEMA_POST", "Post contains an invalid media item.");
+    }
+    for (const itemKey of POST_ITEM_KEYS) {
+      if (!item[itemKey]) throw appError("E_SCHEMA_POST", `Post item is missing required key "${itemKey}".`);
     }
   }
 }
@@ -517,6 +538,12 @@ function setStatus(msg, isError = false) {
   else $("status").textContent = msg;
 }
 
+function setProgressStatus(stage, pct) {
+  const elapsed = state.startedAtMs ? Math.max(0, Date.now() - state.startedAtMs) : 0;
+  const sec = (elapsed / 1000).toFixed(1);
+  setStatus(`[${pct}%] ${stage} (elapsed ${sec}s)`);
+}
+
 async function tickUi() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -541,15 +568,17 @@ function readAllZips() {
 async function generate() {
   $("btnDownload").disabled = true;
   state.lastZipBytes = null;
-  setStatus("Reading ZIPs…");
+  state.startedAtMs = Date.now();
+  setProgressStatus("Reading ZIP files…", 10);
   revokeObjectUrls(state.lastPosts || []);
   state.lastPosts = null;
 
   try {
-    setStatus("Reading ZIP files…");
+    setProgressStatus("Reading ZIP files…", 15);
     await tickUi();
+    await loadSharedPostContract();
     const fileMap = await readAllZips();
-    setStatus("Parsing export JSON…");
+    setProgressStatus("Parsing export JSON…", 35);
     await tickUi();
     const { posts, diagnostics } = loadPostsFromFileMap(fileMap);
     if (posts.length === 0) {
@@ -560,10 +589,11 @@ async function generate() {
       );
     }
     state.lastPosts = posts;
-    setStatus(formatDiagnostics(diagnostics));
+    setProgressStatus("Diagnostics collected", 45);
+    setStatus(`${formatDiagnostics(diagnostics)} (elapsed ${((Date.now() - state.startedAtMs) / 1000).toFixed(1)}s)`);
     await tickUi();
 
-    setStatus("Loading HTML/CSS assets…");
+    setProgressStatus("Loading HTML/CSS assets…", 55);
     await tickUi();
     const template = await loadTemplate();
     const { theme, layout } = getThemeAndLayout();
@@ -574,7 +604,7 @@ async function generate() {
     const blog = await fetchBinaryAsset("assets/blog.css");
     const themeCss = await fetchBinaryAsset(theme.themeCss);
 
-    setStatus("Building preview…");
+    setProgressStatus("Building preview…", 75);
     await tickUi();
     const sortedPosts = sortPosts(posts, true);
     const previewResolver = attachPreviewUrls(sortedPosts);
@@ -590,7 +620,7 @@ async function generate() {
     });
     previewHtml = bundlePreviewForBlobDocument(previewHtml, css, blog, themeCss);
 
-    setStatus("Packing download ZIP…");
+    setProgressStatus("Packing download ZIP…", 90);
     await tickUi();
     const zipPathResolver = (item) => safeZipPath(item.media_url);
     const zipPostsHtml = renderPostsHtml(sortedPosts, zipPathResolver, true, layoutId, true);
@@ -620,9 +650,7 @@ async function generate() {
     state.lastZipBytes = zipSync(exportFiles, { level: 6 });
 
     $("btnDownload").disabled = false;
-    setStatus(
-      `Ready: ${posts.length} post(s) — theme "${theme.id}", ${layout.id} layout. Preview opened; download the ZIP when you are satisfied.`,
-    );
+    setStatus(`Ready: ${posts.length} post(s) — theme "${theme.id}", ${layout.id} layout. Preview opened; download the ZIP when you are satisfied. (elapsed ${((Date.now() - state.startedAtMs) / 1000).toFixed(1)}s)`);
     const previewBlob = new Blob([previewHtml], { type: "text/html;charset=utf-8" });
     const previewUrl = URL.createObjectURL(previewBlob);
     const a = document.createElement("a");
