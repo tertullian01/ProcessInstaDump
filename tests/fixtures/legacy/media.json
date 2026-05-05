@@ -1,0 +1,14 @@
+{
+  "photos": [
+    {
+      "caption": "Legacy caption",
+      "taken_at": "2024-05-01T12:00:00+0000",
+      "path": "photo1.jpg"
+    },
+    {
+      "caption": "Legacy missing media",
+      "taken_at": "2024-05-02T12:00:00+0000",
+      "path": "missing.jpg"
+    }
+  ]
+}

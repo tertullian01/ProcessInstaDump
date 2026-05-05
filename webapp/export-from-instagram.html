@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How to download your Instagram data export for use with Instagram Dump Converter.">
+  <title>Export your data from Instagram — Instagram Dump Converter</title>
+  <link rel="stylesheet" href="assets/css/bootstrap.css">
+  <link rel="stylesheet" href="assets/blog.css">
+  <link href="https://fonts.googleapis.com/css?family=Playfair+Display:700,900" rel="stylesheet">
+  <style>
+    .site-nav { border-bottom: 1px solid #e5e5e5; }
+    .prose { max-width: 42rem; }
+    .prose h2 { margin-top: 2rem; font-size: 1.35rem; }
+    .prose p, .prose li { line-height: 1.6; }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.9rem; }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 50%;
+      background: #0d6efd;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-3">
+    <header class="site-nav pb-3 mb-4">
+      <nav class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <a href="index.html" class="text-decoration-none blog-header-logo text-dark">Instagram Dump Converter</a>
+        <ul class="nav flex-wrap">
+          <li class="nav-item"><a class="nav-link py-1 px-2" href="index.html">Home</a></li>
+          <li class="nav-item"><a class="nav-link py-1 px-2 fw-semibold" href="export-from-instagram.html" aria-current="page">Export from Instagram</a></li>
+          <li class="nav-item"><a class="nav-link py-1 px-2" href="privacy.html">Privacy</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main class="prose mx-auto pb-5">
+      <h1 class="h2 mb-3">How to export your data from Instagram</h1>
+      <p class="lead">
+        This converter expects the <strong>JSON “Download your information”</strong> package from Meta (Instagram), usually delivered as one or more <span class="mono">.zip</span> files. Meta’s menus and wording change over time; use the official links below if a label does not match exactly.
+      </p>
+
+      <div class="alert alert-info" role="note">
+        <strong>What you need:</strong> an export that includes your content in <strong>JSON</strong> form (not only HTML). Recent downloads use <span class="mono">your_instagram_activity/media/posts_1.json</span> (and <span class="mono">posts_2.json</span>, …) plus folders such as <span class="mono">media/posts/</span>. Older exports used a single <span class="mono">media.json</span>. Include those JSON files and the <span class="mono">media/</span> tree when you zip the folder for this app.
+      </div>
+
+      <h2>Request a copy (Instagram app)</h2>
+      <ol class="ps-3">
+        <li class="mb-3">
+          Open <strong>Instagram</strong> and go to your <strong>profile</strong>.
+        </li>
+        <li class="mb-3">
+          Open <strong>Settings</strong> (often the menu in the top corner).
+        </li>
+        <li class="mb-3">
+          Find <strong>Your activity</strong>, <strong>Account</strong>, or <strong>Meta Accounts Center</strong> (wording depends on app version and region).
+        </li>
+        <li class="mb-3">
+          Look for an option named like <strong>Download your information</strong>, <strong>Download a copy of your information</strong>, or <strong>Your information and permissions</strong> → <strong>Download your information</strong>.
+        </li>
+        <li class="mb-3">
+          Choose <strong>Instagram</strong> (if asked which account), pick a <strong>date range</strong> and <strong>format</strong>. Select <strong>JSON</strong> if the export offers a format choice.
+        </li>
+        <li class="mb-3">
+          Submit the request. Meta prepares the archive; this can take <strong>hours to days</strong>. You may get an email when it is ready.
+        </li>
+        <li>
+          Download the ZIP file(s) to your computer. If the export is split into multiple parts, download <strong>all</strong> parts—you can select every part ZIP on the converter home page.
+        </li>
+      </ol>
+
+      <h2>Request a copy (web / Accounts Center)</h2>
+      <p>
+        You can also start or manage a download from Meta’s account tools in a browser:
+      </p>
+      <ul>
+        <li>
+          <a href="https://accountscenter.facebook.com/info_and_permissions/dyi" rel="noopener noreferrer">Meta Accounts Center — Download your information</a>
+        </li>
+        <li>
+          <a href="https://privacycenter.instagram.com/dyi/" rel="noopener noreferrer">Instagram Privacy Center — Download your information</a> (paths may redirect to Accounts Center)
+        </li>
+      </ul>
+
+      <h2>Official help from Meta</h2>
+      <p>
+        For the most up-to-date steps and screenshots, use Instagram’s help article:
+      </p>
+      <p>
+        <a href="https://help.instagram.com/181231772500920/" rel="noopener noreferrer">Review and export a copy of your Instagram information</a>
+      </p>
+
+      <h2>Using the export here</h2>
+      <p>
+        <span class="step-num">1</span>
+        Unzipping is optional. On the <a href="index.html">home page</a>, you can <strong>drop or choose the same <span class="mono">.zip</span> file(s)</strong> Meta gave you (including multiple “part” archives).
+      </p>
+      <p>
+        <span class="step-num">2</span>
+        Click <strong>Generate preview</strong>, then <strong>Download ZIP</strong> if you want a portable HTML folder packaged as a ZIP.
+      </p>
+
+      <p class="text-muted small mt-4">
+        Instagram, Meta, and related names are trademarks of their respective owners. This site is not affiliated with Meta.
+      </p>
+
+      <p class="mt-4">
+        <a href="index.html">← Back to converter</a>
+      </p>
+    </main>
+  </div>
+</body>
+</html>

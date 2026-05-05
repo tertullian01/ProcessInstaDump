@@ -2,13 +2,36 @@ import sys
 import getopt
 import os
 import json
-import uuid
 import ntpath
+import re
 import shutil
 from datetime import datetime
+from html import escape as html_escape
+
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "webtemplate"))
+POST_SCHEMA_KEYS = ("caption", "date_label", "timestamp_raw", "items")
+
+
+class ConverterError(RuntimeError):
+    def __init__(self, code, message, hint=""):
+        super().__init__(message)
+        self.code = code
+        self.hint = hint
+
+
+def fail(code, message, hint=""):
+    raise ConverterError(code, message, hint)
+
 
 def usage():
-    print('python -m instagramdumpconverter -i <inputdir>')
+    print("Usage:")
+    print("  python -m instagramdumpconverter -i <inputdir> [--theme <name>] [--layout stacked|grid]")
+    print("")
+    print("Output options:")
+    print("  --theme classic|minimal|memory-book   visual theme; memory-book is print/PDF friendly (default: classic)")
+    print("  --layout stacked|grid                 multi-column grid on screen; print uses one column (default: stacked)")
 
 
 def path_leaf(path):
@@ -16,193 +39,400 @@ def path_leaf(path):
     return ntpath.basename(head) or tail
 
 
-def parseTime(timeString):
-    result = None
-    format1 = "%Y-%m-%dT%H:%M:%S.%f%z"
-    format2 = "%Y-%m-%dT%H:%M:%S%z"
-    try:
-        result = datetime.strptime(timeString, format1)
-    except ValueError:
-        result = None
-    try:
-        result = datetime.strptime(timeString, format2)
-    except ValueError:
-        result = None
-    return result
+def parseTime(time_string):
+    formats = ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z")
+    for fmt in formats:
+        try:
+            return datetime.strptime(time_string, fmt)
+        except ValueError:
+            pass
+    return None
 
 
-def copytree(src, dst, symlinks=False, ignore=None):
+def copytree(src, dst):
     for item in os.listdir(src):
-        s = os.path.join(src, item)
-        d = os.path.join(dst, item)
-        if os.path.isdir(s):
-            shutil.copytree(s, d, symlinks, ignore)
+        source_item = os.path.join(src, item)
+        destination_item = os.path.join(dst, item)
+        if os.path.isdir(source_item):
+            shutil.copytree(source_item, destination_item)
         else:
-            shutil.copy2(s, d)
+            shutil.copy2(source_item, destination_item)
 
 
-carouselStart = '''<div id="%s" class="carousel slide" data-ride="carousel">
-<div class="carousel-inner">
-'''
-carouselImage = '''<div class="carousel-item%s">
-    <img class="d-block w-100" src="%s" alt="%s">
-</div>'''
-carouselEnd = '''</div>
-    <a class="carousel-control-prev" href="#%s" role="button" data-slide="prev">
-        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-        <span class="sr-only">Previous</span>
-    </a>
-    <a class="carousel-control-next" href="#%s" role="button" data-slide="next">
-        <span class="carousel-control-next-icon" aria-hidden="true"></span>
-        <span class="sr-only">Next</span>
-    </a>
-</div>
-'''
+OUTPUT_THEMES = {
+    "classic": {
+        "page_title": "Instagram archive",
+        "body_class": "output-theme-classic",
+        "main_class": "container",
+        "top_class": "",
+        "extra_head": "",
+        "header": "",
+        "css_file": "classic.css",
+    },
+    "minimal": {
+        "page_title": "Instagram archive",
+        "body_class": "output-theme-minimal",
+        "main_class": "container",
+        "top_class": "",
+        "extra_head": "",
+        "header": "",
+        "css_file": "minimal.css",
+    },
+    "memory-book": {
+        "page_title": "Memory book",
+        "body_class": "output-theme-memory-book",
+        "main_class": "container",
+        "top_class": "pt-2",
+        "extra_head": (
+            '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&'
+            'family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">'
+        ),
+        "header": (
+            "<header class=\"memory-book-header text-center py-3 py-md-4 px-2\">"
+            "<h1 class=\"memory-book-title mb-2\">Memory book</h1>"
+            "<p class=\"memory-book-subtitle mb-0 text-muted\">"
+            "A printable keepsake from your Instagram archive — use your browser’s Print dialog for PDF or paper."
+            "</p></header>"
+        ),
+        "css_file": "memory-book.css",
+    },
+}
 
-workingDir = "%s%s" % (os.getcwd(), os.path.sep)
+
+def build_post(post):
+    caption = post.get("caption", "") or ""
+    date_label = post.get("date_label", "") or ""
+    caption_e = html_escape(caption)
+    date_e = html_escape(date_label)
+    post_details = "<div class='blog-post'><p class='blog-post-meta'>%s</p>" % date_e
+    for item in post.get("items", []):
+        media_type = item.get("media_type", "").upper()
+        media_url = item.get("media_url", "")
+        if not media_url:
+            continue
+        if media_type == "VIDEO":
+            media_html = "<div class='embed-responsive embed-responsive-16by9'><video width='320' height='240' controls><source src='%s' type='video/mp4'></video></div>" % html_escape(
+                media_url
+            )
+        else:
+            media_html = "<img src='%s' class='img-fluid' alt='%s'>" % (html_escape(media_url), caption_e)
+        post_details = "%s%s" % (post_details, media_html)
+    post_details = "%s<blockquote><p>%s</p></blockquote>" % (post_details, caption_e)
+    post_details += "</div>"
+    return post_details
+
+
+def render_posts(posts, descending=True, layout="stacked"):
+    layout_key = layout if layout in ("stacked", "grid") else "stacked"
+    inner = ""
+    for post in sorted(posts, key=lambda p: p.get("timestamp_raw", ""), reverse=descending):
+        inner = "%s%s" % (inner, build_post(post))
+    return '<div class="posts-layout posts-layout--%s">%s</div>' % (layout_key, inner)
+
+
+def write_output(output_dir, html_posts, theme="classic"):
+    theme_key = theme if theme in OUTPUT_THEMES else "classic"
+    cfg = OUTPUT_THEMES[theme_key]
+
+    template_file = os.path.join(TEMPLATE_DIR, "index.html")
+    with open(template_file, encoding="utf-8") as file:
+        html_template = file.read()
+
+    html_template = html_template.replace("%%TITLE%%", html_escape(cfg["page_title"]))
+    html_template = html_template.replace("%%BODY_CLASS%%", cfg["body_class"])
+    html_template = html_template.replace("%%MAIN_CLASS%%", cfg["main_class"])
+    html_template = html_template.replace("%%TOP_CLASS%%", cfg["top_class"])
+    html_template = html_template.replace("%%EXTRA_HEAD%%", cfg["extra_head"])
+    html_template = html_template.replace("%%HEADER%%", cfg["header"])
+    html_template = html_template.replace("%%POSTS%%", html_posts)
+    html_template = html_template.replace("%%FOOTER%%", "")
+
+    css_output = os.path.join(output_dir, "css")
+    if os.path.exists(css_output):
+        shutil.rmtree(css_output)
+    os.mkdir(css_output)
+    copytree(os.path.join(TEMPLATE_DIR, "css"), css_output)
+
+    js_output = os.path.join(output_dir, "js")
+    if os.path.exists(js_output):
+        shutil.rmtree(js_output)
+    os.mkdir(js_output)
+    copytree(os.path.join(TEMPLATE_DIR, "js"), js_output)
+
+    shutil.copyfile(os.path.join(TEMPLATE_DIR, "blog.css"), os.path.join(output_dir, "blog.css"))
+    theme_src = os.path.join(TEMPLATE_DIR, "themes", cfg["css_file"])
+    if not os.path.isfile(theme_src):
+        raise RuntimeError("Missing theme CSS: %s" % theme_src)
+    shutil.copyfile(theme_src, os.path.join(output_dir, "theme.css"))
+
+    with open(os.path.join(output_dir, "index.html"), "w", encoding="utf-8") as file:
+        file.write(html_template)
+
+
+def make_diagnostics(input_dir):
+    return {
+        "input_dir": os.path.abspath(input_dir),
+        "format": "unknown",
+        "json_files_found": 0,
+        "media_files_resolved": 0,
+        "media_files_missing": 0,
+        "posts_parsed": 0,
+        "posts_skipped": 0,
+        "invalid_posts": 0,
+    }
+
+
+def scan_dump_inputs(input_dir):
+    input_dir = os.path.abspath(input_dir)
+    media_files = []
+    posts_json_files = []
+    for subdir, _dirs, files in os.walk(input_dir):
+        for file_name in files:
+            if file_name == "media.json":
+                media_files.append(os.path.join(subdir, file_name))
+            elif re.match(r"^posts_\d+\.json$", file_name, re.I):
+                posts_json_files.append(os.path.join(subdir, file_name))
+    return sorted(media_files), sorted(posts_json_files)
+
+
+def print_diagnostics(diagnostics):
+    print(
+        "Diagnostics: format=%s, json=%d, posts_parsed=%d, posts_skipped=%d, media_resolved=%d, media_missing=%d"
+        % (
+            diagnostics.get("format", "unknown"),
+            diagnostics.get("json_files_found", 0),
+            diagnostics.get("posts_parsed", 0),
+            diagnostics.get("posts_skipped", 0),
+            diagnostics.get("media_files_resolved", 0),
+            diagnostics.get("media_files_missing", 0),
+        )
+    )
+
+
+def validate_post_schema(post):
+    if not isinstance(post, dict):
+        fail("E_SCHEMA_POST", "Post adapter produced a non-object value.", "Check loader adapter output.")
+    for key in POST_SCHEMA_KEYS:
+        if key not in post:
+            fail("E_SCHEMA_POST", "Post adapter missing required key '%s'." % key, "Update loader adapter mapping.")
+    if not isinstance(post.get("items"), list):
+        fail("E_SCHEMA_POST", "Post 'items' must be a list.", "Ensure media adapter maps each media to an item object.")
+    for item in post["items"]:
+        if not isinstance(item, dict) or not item.get("media_url"):
+            fail("E_SCHEMA_POST", "Post contains invalid media item.", "Check media path resolution for this export format.")
+
+
+def resolve_posts_export_uri(json_file_path, uri):
+    """New export: JSON under .../media/posts_1.json, uris like media/posts/202603/...."""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(json_file_path)))
+    norm_uri = uri.replace("\\", "/").lstrip("/")
+    return os.path.normpath(os.path.join(base, norm_uri))
+
+
+def _load_posts_legacy_media_json(media_files, input_dir, diagnostics, verbose=False):
+    diagnostics["format"] = "legacy-media-json"
+    diagnostics["json_files_found"] = len(media_files)
+    grouped = {}
+    for filename in media_files:
+        if verbose:
+            print("Opening media file %s" % filename)
+        with open(filename, encoding="utf-8") as file:
+            file_data = json.load(file)
+        for post_type in file_data.keys():
+            if verbose:
+                print("Processing %s" % post_type)
+            for post in file_data[post_type]:
+                if len(post.keys()) == 0:
+                    diagnostics["posts_skipped"] += 1
+                    continue
+                path = post.get("path")
+                if path:
+                    post["path"] = "%s/%s" % (path_leaf(filename), path)
+                dt_taken_at = parseTime(post.get("taken_at", ""))
+                hash_taken_at = dt_taken_at.strftime("%Y-%m-%d %H:%M") if dt_taken_at else "unknown"
+                grouped.setdefault(hash_taken_at, []).append(post)
+
+    posts = []
+    for key, group in grouped.items():
+        first = group[0]
+        dt_first = parseTime(first.get("taken_at", ""))
+        date_label = dt_first.strftime("%B %d, %Y") if dt_first else ""
+        items = []
+        for media in group:
+            relative_path = media.get("path", "")
+            source_file = os.path.join(input_dir, relative_path.replace("/", os.path.sep))
+            if not relative_path or not os.path.isfile(source_file):
+                diagnostics["media_files_missing"] += 1
+                if verbose:
+                    print("ERROR: Unable to find file at %s" % source_file)
+                continue
+            diagnostics["media_files_resolved"] += 1
+            items.append(
+                {
+                    "media_type": "VIDEO" if relative_path.lower().endswith("mp4") else "IMAGE",
+                    "media_url": relative_path,
+                }
+            )
+
+        posts.append(
+            {
+                "caption": first.get("caption", ""),
+                "date_label": date_label,
+                "timestamp_raw": key,
+                "items": items,
+            }
+        )
+        if not items:
+            diagnostics["posts_skipped"] += 1
+    diagnostics["posts_parsed"] = len(posts)
+    return posts
+
+
+def _load_posts_modern_posts_json(posts_json_files, input_dir, diagnostics, verbose=False):
+    input_dir = os.path.abspath(input_dir)
+    diagnostics["format"] = "modern-posts-json"
+    diagnostics["json_files_found"] = len(posts_json_files)
+    posts = []
+    for filename in sorted(posts_json_files):
+        if verbose:
+            print("Opening posts file %s" % filename)
+        with open(filename, encoding="utf-8") as file:
+            data = json.load(file)
+        if not isinstance(data, list):
+            diagnostics["posts_skipped"] += 1
+            continue
+        for post in data:
+            if not post or not isinstance(post, dict):
+                diagnostics["posts_skipped"] += 1
+                continue
+            caption = post.get("title") or ""
+            ts = post.get("creation_timestamp")
+            dt = datetime.fromtimestamp(ts) if ts is not None else None
+            hash_key = dt.strftime("%Y-%m-%d %H:%M") if dt else "unknown"
+            date_label = dt.strftime("%B %d, %Y") if dt else ""
+            items = []
+            for m in post.get("media") or []:
+                if not isinstance(m, dict):
+                    continue
+                uri = m.get("uri")
+                if not uri:
+                    continue
+                source_file = resolve_posts_export_uri(filename, uri)
+                if not os.path.isfile(source_file):
+                    diagnostics["media_files_missing"] += 1
+                    if verbose:
+                        print("ERROR: Unable to find file at %s" % source_file)
+                    continue
+                diagnostics["media_files_resolved"] += 1
+                relative_path = os.path.relpath(source_file, input_dir).replace("\\", "/")
+                items.append(
+                    {
+                        "media_type": "VIDEO" if relative_path.lower().endswith("mp4") else "IMAGE",
+                        "media_url": relative_path,
+                    }
+                )
+            if not items:
+                continue
+            posts.append(
+                {
+                    "caption": caption,
+                    "date_label": date_label,
+                    "timestamp_raw": hash_key,
+                    "items": items,
+                }
+            )
+    diagnostics["posts_parsed"] = len(posts)
+    return posts
+
+
+def load_posts_from_dump(input_dir, verbose=False):
+    input_dir = os.path.abspath(input_dir)
+    diagnostics = make_diagnostics(input_dir)
+    media_files, posts_json_files = scan_dump_inputs(input_dir)
+
+    if media_files:
+        posts = _load_posts_legacy_media_json(media_files, input_dir, diagnostics, verbose=verbose)
+        for post in posts:
+            validate_post_schema(post)
+        return posts, diagnostics
+    if posts_json_files:
+        posts = _load_posts_modern_posts_json(posts_json_files, input_dir, diagnostics, verbose=verbose)
+        for post in posts:
+            validate_post_schema(post)
+        return posts, diagnostics
+    fail(
+        "E_NO_INPUT_JSON",
+        "No media.json or posts_<n>.json found under %s." % input_dir,
+        "Unzip all archive parts and pass the directory that contains your_instagram_activity.",
+    )
+
 
 def run(argv):
-    #Process the command line arguments
     input_dir = None
     verbose = False
+    output_theme = "classic"
+    output_layout = "stacked"
+
     try:
-        opts, args = getopt.getopt(argv, "hi:v", ["inputdir="])
+        opts, _args = getopt.getopt(
+            argv,
+            "hi:v",
+            [
+                "inputdir=",
+                "theme=",
+                "layout=",
+            ],
+        )
     except getopt.GetoptError as err:
         print(err)
         usage()
         sys.exit(2)
+
     for opt, arg in opts:
         if opt == "-h":
             usage()
             sys.exit()
-        elif opt in ("-i", "--inputdir"):
+        if opt in ("-i", "--inputdir"):
             input_dir = arg
         elif opt == "-v":
             verbose = True
-        else:
-            assert False, "unhandled option"
-    argError = False
-    if input_dir is None:
-        argError = True
-        print("No input directory specified")
-    if argError:
-        usage()
-        sys.exit(2)
-    print("Processing data in %s" % (input_dir))
+        elif opt == "--theme":
+            candidate = arg.strip().lower()
+            if candidate not in OUTPUT_THEMES:
+                print(
+                    "Invalid --theme value '%s'. Expected one of: %s"
+                    % (arg, ", ".join(sorted(OUTPUT_THEMES.keys())))
+                )
+                sys.exit(2)
+            output_theme = candidate
+        elif opt == "--layout":
+            candidate = arg.strip().lower()
+            if candidate not in ("stacked", "grid"):
+                print("Invalid --layout value '%s'. Expected stacked or grid" % arg)
+                sys.exit(2)
+            output_layout = candidate
 
-    #make sure the input path exists
-    if not os.path.isdir(input_dir):
-        print("Unable to find input_dir '%s'" % input_dir)
+    try:
+        if input_dir is None:
+            fail("E_ARGS_INPUT_DIR", "No input directory specified.", "Use -i <inputdir> with an extracted Instagram export.")
+        if not os.path.isdir(input_dir):
+            fail("E_INPUT_DIR_MISSING", "Unable to find input_dir '%s'." % input_dir, "Check path spelling and unzip location.")
+
+        print("Processing data in %s" % input_dir)
+        posts, diagnostics = load_posts_from_dump(input_dir, verbose=verbose)
+        print_diagnostics(diagnostics)
+        write_output(
+            input_dir,
+            render_posts(
+                posts,
+                descending=True,
+                layout=output_layout,
+            ),
+            theme=output_theme,
+        )
+        print("Generated output in %s" % input_dir)
+    except ConverterError as err:
+        print("ERROR [%s]: %s" % (err.code, err))
+        if err.hint:
+            print("Hint: %s" % err.hint)
         sys.exit(3)
-
-    mediaFiles = []
-    #Go through the directory tree looking for media.json
-    for subdir, dirs, files in os.walk(input_dir):
-        for file in files:
-            if (file == "media.json"):
-                list.append(mediaFiles, os.path.join(subdir, file))
-
-    htmlPost = ""
-    #Keep a list of hashes. Posts that have multiple images have the same timestamp and caption
-    postHash = {}
-    for filename in mediaFiles:
-        print("Opening media file %s" % filename)
-        with open(filename) as f:
-            file_data = json.load(f)
-        print("Processing json data")
-        for post_type in file_data.keys():
-            print("Processing %s" % post_type)
-            for post in file_data[post_type]:
-                if len(post.keys()) > 0:
-                    path = post.get('path', None)
-                    if path is not None:
-                        fullPath = "%s/%s" % (path_leaf(filename), path)
-                        post['path'] = fullPath
-
-                    taken_at = post.get('taken_at', "")
-                    dt_taken_at = parseTime(taken_at)
-                    post['taken_at'] = dt_taken_at.strftime("%B %d, %Y") if dt_taken_at is not None else ""
-                    hash_taken_at = dt_taken_at.strftime("%Y-%m-%d %H:%M") if dt_taken_at is not None else ""
-
-                    if hash_taken_at not in postHash:
-                        postHash[hash_taken_at] = []
-                    postHash[hash_taken_at].append(post)
-
-    #process the post hash
-    for post_date in postHash.keys():
-        postDetails = "<div class='blog-post'><p class='blog-post-meta'>%s</p>" % taken_at
-        if len(postHash[post_date]) == 1:
-            post = postHash[post_date][0]
-            caption = post.get('caption', "")
-            taken_at = post.get('taken_at', "")
-            path = post.get('path', None)
-
-            if path is not None:
-                if os.path.isfile("%s%s" % (input_dir, path.replace("/", os.path.sep))):
-                    mediaHtml = "<img src='%s' class='img-fluid' alt='%s'>" % (path, caption)
-                    if fullPath.endswith("mp4"):
-                        mediaHtml = "<div class='embed-responsive embed-responsive-16by9'><video width='320' height='240' controls><source src='%s' type='video/mp4'></video></div>" % fullPath
-                    postDetails = "%s%s" % (postDetails, mediaHtml)
-                else:
-                    print("ERROR: Unable to find file at %s" % ("%s%s" % (input_dir, path.replace("/", os.path.sep))))
-        else:
-            uid = uuid.uuid4().hex
-            postDetails = "%s\n%s" % (postDetails, carouselStart % uid)
-            count = 0
-            videoPosts = []
-            for post in postHash[post_date]:
-                caption = post.get('caption', "")
-                taken_at = post.get('taken_at', "")
-                path = post.get('path', None)
-
-                if path is not None:
-                    if os.path.isfile("%s%s" % (input_dir, path.replace("/", os.path.sep))):
-                        if path.endswith("mp4"):
-                            videoPosts.append(post);
-                        else:
-                            mediaHtml = carouselImage % (" active" if count == 0 else "", path, caption)
-                        postDetails = "%s\n%s" % (postDetails, mediaHtml)
-                        count += 1
-                    else:
-                        print("ERROR: Unable to find file at %s" % ("%s%s" % (input_dir, path.replace("/", os.path.sep))))
-            postDetails = "%s\n%s" % (postDetails, carouselEnd % (uid, uid))
-            #add videos as separate posts since they can't be in the carousel
-            for post in videoPosts:
-                postDetails = "%s<div class='embed-responsive embed-responsive-16by9'><video width='320' height='240' controls><source src='%s' type='video/mp4'></video></div>" % (postDetails, fullPath)
-        postDetails = "%s<blockquote><p>%s</p><blockquote></div>" % (postDetails, caption)
-        htmlPost = "%s%s" % (htmlPost, postDetails)
-
-    #Read in the template file
-    file = open("webtemplate/index.html")
-    htmlTemplate = file.read()
-    file.close()
-    #Replace place holders
-    htmlTemplate = htmlTemplate.replace("%%HEADER%%", "")
-    htmlTemplate = htmlTemplate.replace("%%POSTS%%", htmlPost)
-    htmlTemplate = htmlTemplate.replace("%%FOOTER%%", "")
-
-    #copy css and js files to inputDir and write out htmlTemplate to index.html
-    templateDir = "%s%s" % ("webtemplate", os.path.sep)
-
-    srcDir = "%s%s" % (workingDir, "%s%s" % (templateDir, "css"))
-    outputDir = "%s%s" % (input_dir, "css")
-    if os.path.exists(outputDir) :
-        shutil.rmtree(outputDir)
-    os.mkdir(outputDir)
-    copytree(srcDir, outputDir)
-
-    srcDir = "%s%s" % (workingDir, "%s%s" % (templateDir, "js"))
-    outputDir = "%s%s" % (input_dir, "js")
-    if os.path.exists(outputDir):
-        shutil.rmtree(outputDir)
-    os.mkdir(outputDir)
-    copytree(srcDir, outputDir)
-
-    srcDir = "%s%s" % (workingDir, "%s%s" % (templateDir, "blog.css"))
-    outputDir = "%s%s" % (input_dir, "blog.css")
-    shutil.copyfile(srcDir, outputDir)
-
-    #write the html file
-    file = open("%s%s" % (input_dir,  "index.html"), "w")
-    file.write(htmlTemplate)
-    file.close()

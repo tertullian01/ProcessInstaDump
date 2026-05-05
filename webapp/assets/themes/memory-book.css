@@ -1,0 +1,161 @@
+/*
+ * Memory book — optimized for printing (photo album / keepsake).
+ * Screen preview approximates paper; use browser Print → Save as PDF.
+ */
+
+body.output-theme-memory-book {
+  --paper: #f6f1e9;
+  --ink: #2c241c;
+  --muted: #6b5e54;
+  --accent: #8b6914;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body.output-theme-memory-book .memory-book-header {
+  border-bottom: 1px solid rgba(44, 36, 28, 0.15);
+  margin-bottom: 2rem;
+}
+
+body.output-theme-memory-book .memory-book-title {
+  font-family: "Cormorant Garamond", "Palatino Linotype", Palatino, Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+body.output-theme-memory-book .memory-book-subtitle {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1.15rem;
+  color: var(--muted);
+}
+
+body.output-theme-memory-book h1,
+body.output-theme-memory-book h2,
+body.output-theme-memory-book h3,
+body.output-theme-memory-book .blog-post-meta {
+  font-family: "Cormorant Garamond", Georgia, serif;
+}
+
+body.output-theme-memory-book .blog-post-meta {
+  color: var(--muted);
+  font-size: 1rem;
+  font-style: italic;
+  border-bottom: none;
+}
+
+body.output-theme-memory-book .blog-post {
+  margin-bottom: 2.5rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid rgba(44, 36, 28, 0.12);
+}
+
+body.output-theme-memory-book .blog-post:last-child {
+  border-bottom: 0;
+}
+
+body.output-theme-memory-book blockquote {
+  border-left: 0;
+  padding-left: 0;
+  margin-top: 1rem;
+  font-family: "Crimson Pro", Georgia, serif;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+body.output-theme-memory-book .posts-layout--stacked {
+  max-width: 6.5in;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+body.output-theme-memory-book .posts-layout--grid {
+  grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr));
+  gap: 1.25rem 1rem;
+}
+
+body.output-theme-memory-book .posts-layout--grid .blog-post {
+  border: 1px solid rgba(44, 36, 28, 0.12);
+  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 0;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+body.output-theme-memory-book .posts-layout--grid .blog-post img {
+  border-radius: 2px;
+}
+
+body.output-theme-memory-book .blog-footer {
+  background: transparent;
+  border-top: 1px solid rgba(44, 36, 28, 0.12);
+}
+
+body.output-theme-memory-book .embed-responsive {
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* ----- Print ----- */
+@page {
+  size: letter;
+  margin: 0.6in 0.65in;
+}
+
+@media print {
+  body.output-theme-memory-book {
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.output-theme-memory-book .memory-book-header {
+    text-align: center;
+    page-break-after: avoid;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  body.output-theme-memory-book .blog-post {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 0.4in;
+    padding: 0.2in 0;
+  }
+
+  body.output-theme-memory-book .blog-post img {
+    max-height: 7in;
+    width: auto !important;
+    max-width: 100% !important;
+    object-fit: contain;
+  }
+
+  /* Grid collapses to one column when printing */
+  body.output-theme-memory-book .posts-layout--grid {
+    display: block !important;
+  }
+
+  body.output-theme-memory-book .posts-layout--grid .blog-post {
+    border: none;
+    padding: 0;
+    background: transparent;
+  }
+
+  body.output-theme-memory-book video,
+  body.output-theme-memory-book .embed-responsive {
+    display: none !important;
+  }
+
+  body.output-theme-memory-book .blog-footer {
+    display: none !important;
+  }
+
+  body.output-theme-memory-book a[href^="#"] {
+    display: none !important;
+  }
+}

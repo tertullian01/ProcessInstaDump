@@ -1,0 +1,16 @@
+/* Classic blog — layout base rules live in blog.css; print tweaks only */
+
+@media print {
+  body.output-theme-classic .posts-layout--grid {
+    display: block;
+  }
+
+  body.output-theme-classic .blog-post {
+    page-break-inside: avoid;
+  }
+
+  body.output-theme-classic .blog-post img {
+    max-width: 100%;
+    height: auto;
+  }
+}

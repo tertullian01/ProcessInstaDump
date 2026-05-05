@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Convert your Instagram data export to HTML in your browser. No upload to our server.">
+  <title>Instagram Dump Converter (browser)</title>
+  <link rel="stylesheet" href="assets/css/bootstrap.css">
+  <link rel="stylesheet" href="assets/blog.css">
+  <link href="https://fonts.googleapis.com/css?family=Playfair+Display:700,900" rel="stylesheet">
+  <style>
+    .site-nav { border-bottom: 1px solid #e5e5e5; }
+    .app-hero { padding: 2rem 0; }
+    .drop-zone {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      background: #fafafa;
+      cursor: pointer;
+    }
+    .drop-zone.drag { border-color: #0d6efd; background: #f0f7ff; }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="container pt-3">
+    <header class="site-nav pb-3 mb-2">
+      <nav class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <h1 class="h3 mb-0">
+          <a href="index.html" class="text-decoration-none blog-header-logo text-dark">Instagram Dump Converter</a>
+        </h1>
+        <ul class="nav flex-wrap">
+          <li class="nav-item"><a class="nav-link py-1 px-2 fw-semibold" href="index.html" aria-current="page">Home</a></li>
+          <li class="nav-item"><a class="nav-link py-1 px-2" href="export-from-instagram.html">Export from Instagram</a></li>
+          <li class="nav-item"><a class="nav-link py-1 px-2" href="privacy.html">Privacy</a></li>
+        </ul>
+      </nav>
+    </header>
+  </div>
+  <div class="container app-hero">
+    <p class="lead">
+      Turn your <strong>Instagram data export</strong> (JSON + media) into a simple HTML archive you can open or print.
+      Processing happens <strong>in your browser</strong>. This site does not upload your export to a server or store it.
+    </p>
+    <p class="text-muted small">
+      Serve this folder over <strong>HTTP or HTTPS</strong> (for example upload <code class="mono">webapp/</code> to Hostinger and open the site normally). Opening <code class="mono">index.html</code> as a <code class="mono">file://</code> URL often breaks module loading from the CDN.
+    </p>
+    <p class="text-muted small">
+      Select one or more Instagram <strong>JSON export</strong> <code class="mono">.zip</code> parts (the same archives you would unzip for the Python tool).
+      Need the files first? <a href="export-from-instagram.html">How to export your data from Instagram</a>.
+    </p>
+
+    <div id="dropZone" class="drop-zone my-4" tabindex="0" role="button" aria-label="Drop ZIP files here">
+      <p class="mb-2"><strong>Drop Instagram export ZIP files here</strong> or click to choose files.</p>
+      <p class="mb-0 text-muted small">Accepted: <span class="mono">.zip</span> — you can select multiple parts.</p>
+      <input type="file" id="fileInput" multiple accept=".zip,application/zip" class="d-none">
+    </div>
+
+    <div id="fileList" class="mb-3 small mono text-muted"></div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label for="themeSelect" class="form-label mb-1">Output theme</label>
+        <select id="themeSelect" class="form-select" aria-describedby="themeHelp">
+          <option value="classic" selected>Classic blog — default Playfair look</option>
+          <option value="minimal">Minimal — clean sans, editorial</option>
+          <option value="memory-book">Memory book — warm paper, print- and PDF-friendly</option>
+        </select>
+        <p id="themeHelp" class="form-text small text-muted mb-0">
+          “Memory book” uses page-friendly breaks and hides video in print; use <strong>Print → Save as PDF</strong> for a keepsake.
+        </p>
+      </div>
+      <div class="col-md-6">
+        <label for="layoutSelect" class="form-label mb-1">Layout</label>
+        <select id="layoutSelect" class="form-select" aria-describedby="layoutHelp">
+          <option value="stacked" selected>Stacked — one post after another (best for long captions)</option>
+          <option value="grid">Grid — multi-column on wide screens; collapses to one column when printing</option>
+        </select>
+        <p id="layoutHelp" class="form-text small text-muted mb-0">
+          <strong>Stacked</strong> uses a centered narrow column. <strong>Grid</strong> fills the page width and shows multiple posts per row on a wide window (resize the preview to see it; one post always looks like a single column).
+        </p>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <button type="button" id="btnGenerate" class="btn btn-primary" disabled>Generate preview</button>
+      <button type="button" id="btnDownload" class="btn btn-outline-primary" disabled>Download ZIP</button>
+    </div>
+
+    <div id="status" class="alert alert-info d-none" role="status"></div>
+    <div id="error" class="alert alert-danger d-none" role="alert"></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

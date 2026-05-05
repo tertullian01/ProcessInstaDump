@@ -1,0 +1,71 @@
+/* Minimal / editorial — screen-first, calm typography */
+
+body.output-theme-minimal {
+  --minimal-fg: #1a1a1a;
+  --minimal-muted: #6b6b6b;
+  --minimal-border: #e0e0e0;
+  color: var(--minimal-fg);
+  background: #fff;
+}
+
+body.output-theme-minimal .blog-post {
+  margin-bottom: 3rem;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--minimal-border);
+}
+
+body.output-theme-minimal .blog-post:last-child {
+  border-bottom: 0;
+}
+
+body.output-theme-minimal h1,
+body.output-theme-minimal h2,
+body.output-theme-minimal h3,
+body.output-theme-minimal .blog-header-logo {
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+body.output-theme-minimal .blog-post-meta {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--minimal-muted);
+}
+
+body.output-theme-minimal blockquote {
+  border-left: 3px solid var(--minimal-border);
+  padding-left: 1.25rem;
+  margin-top: 1.25rem;
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+body.output-theme-minimal .posts-layout--stacked {
+  max-width: 38rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+body.output-theme-minimal .posts-layout--grid {
+  grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+  gap: 1.25rem 1rem;
+}
+
+body.output-theme-minimal .posts-layout--grid .blog-post {
+  border: 1px solid var(--minimal-border);
+  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 0;
+}
+
+@media print {
+  body.output-theme-minimal .posts-layout--grid {
+    display: block;
+  }
+
+  body.output-theme-minimal .blog-post {
+    page-break-inside: avoid;
+  }
+}
