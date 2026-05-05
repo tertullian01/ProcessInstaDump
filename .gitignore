@@ -134,3 +134,7 @@ dmypy.json
 **/__pycache__/
 *.pyo
 *.pyd
+.ruff_cache/
+.playwright/
+playwright-report/
+test-results/

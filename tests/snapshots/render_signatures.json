@@ -1,0 +1,8 @@
+{
+  "classic|stacked": "body=output-theme-classic;layout=posts-layout--stacked;memory_title=0;caption=1",
+  "classic|grid": "body=output-theme-classic;layout=posts-layout--grid;memory_title=0;caption=1",
+  "minimal|stacked": "body=output-theme-minimal;layout=posts-layout--stacked;memory_title=0;caption=1",
+  "minimal|grid": "body=output-theme-minimal;layout=posts-layout--grid;memory_title=0;caption=1",
+  "memory-book|stacked": "body=output-theme-memory-book;layout=posts-layout--stacked;memory_title=1;caption=1",
+  "memory-book|grid": "body=output-theme-memory-book;layout=posts-layout--grid;memory_title=1;caption=1"
+}

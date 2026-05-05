@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "required_post_keys": ["caption", "date_label", "timestamp_raw", "items"],
+  "required_item_keys": ["media_url"]
+}
